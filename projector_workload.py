@@ -67,7 +67,9 @@ def cached_checkpoint(reference: str, cache: Path) -> str:
     )
 
 
-def run(output_root, steps=20, tiny=False, wandb_project="", wandb_entity=""):
+def run(output_root, steps=20, tiny=False, wandb_project="", wandb_entity="", run_prefix=""):
+    if wandb_project and not run_prefix:
+        raise ValueError("--run-prefix is required with --wandb-project")
     started = time.monotonic()
     output = Path(output_root)
     output.mkdir(parents=True, exist_ok=True)
@@ -134,7 +136,7 @@ def run(output_root, steps=20, tiny=False, wandb_project="", wandb_entity=""):
             WandbConfig(
                 project=wandb_project,
                 entity=wandb_entity or None,
-                name=f"projector-{output.name}",
+                name=f"{run_prefix}-{output.name}",
                 mode="online",
                 resume="never",
                 save_code=False,
@@ -142,7 +144,7 @@ def run(output_root, steps=20, tiny=False, wandb_project="", wandb_entity=""):
             ),
         )
     trainer_config = TrainerConfig(
-        id=f"projector-{output.name}",
+        id=output.name,
         num_train_steps=steps,
         train_batch_size=2,
         per_device_parallelism=2,
@@ -254,5 +256,6 @@ if __name__ == "__main__":
     parser.add_argument("--output", default="/tmp/marin-projector-local-smoke")
     parser.add_argument("--wandb-project", default="")
     parser.add_argument("--wandb-entity", default="")
+    parser.add_argument("--run-prefix", default="")
     args = parser.parse_args()
-    run(args.output, args.steps, args.tiny, args.wandb_project, args.wandb_entity)
+    run(args.output, args.steps, args.tiny, args.wandb_project, args.wandb_entity, args.run_prefix)

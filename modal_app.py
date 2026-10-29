@@ -60,7 +60,7 @@ image = (
     volumes={"/results": results_volume},
     secrets=[modal.Secret.from_name("wandb", required_keys=["WANDB_API_KEY"])],
 )
-def projector_smoke(steps: int = 20, wandb_project: str = "marin-vlm", wandb_entity: str = "") -> dict:
+def projector_smoke(wandb_project: str, run_prefix: str, steps: int = 20, wandb_entity: str = "") -> dict:
     subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total,driver_version", "--format=csv"], check=True)
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     output = Path("/results") / run_id
@@ -78,6 +78,8 @@ def projector_smoke(steps: int = 20, wandb_project: str = "marin-vlm", wandb_ent
                 wandb_project,
                 "--wandb-entity",
                 wandb_entity,
+                "--run-prefix",
+                run_prefix,
             ],
             cwd=REMOTE_MARIN,
             check=True,
@@ -111,8 +113,8 @@ def environment_info() -> dict:
 
 
 @app.local_entrypoint()
-def main(steps: int = 20, wandb_project: str = "marin-vlm", wandb_entity: str = "") -> None:
-    result = projector_smoke.remote(steps, wandb_project, wandb_entity)
+def main(wandb_project: str, run_prefix: str, steps: int = 20, wandb_entity: str = "") -> None:
+    result = projector_smoke.remote(wandb_project, run_prefix, steps, wandb_entity)
     output = ROOT / "run-results"
     output.mkdir(exist_ok=True)
     (output / "latest.json").write_text(json.dumps(result, indent=2) + "\n")

@@ -33,7 +33,8 @@ uv run modal run modal_app.py::environment_info
 Create a Modal Secret named `wandb` containing `WANDB_API_KEY` using Modal's
 Secrets settings. The key is injected only into the training function at runtime;
 it is never included in the image or source code. Account selection is a CLI
-argument, and an omitted entity uses the authenticated account's default.
+argument, and an omitted entity uses the authenticated account's default. The
+project and run-name prefix are required launch arguments; neither is stored in code.
 
 Training metrics, checkpoint references, hyperparameters, and the final frozen-weight
 checks are logged to W&B alongside the JSON logs. Each launch gets a unique run ID.
@@ -46,7 +47,8 @@ committed revision from GitHub. Local uncommitted edits are not copied into the
 remote checkout.
 
 ```bash
-uv run modal run modal_app.py --steps 20 --wandb-project marin-vlm --wandb-entity <your-entity>
+uv run modal run modal_app.py --steps 20 \
+  --wandb-project <your-project> --run-prefix <your-run-prefix> --wandb-entity <your-entity>
 ```
 
 The function requests one H200, eight CPU cores, and 64 GiB of host memory, with a
