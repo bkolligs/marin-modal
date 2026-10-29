@@ -1,0 +1,10 @@
+[project]
+name = "marin-modal"
+version = "0.1.0"
+description = "Modal launch tooling for Marin multimodal experiments"
+requires-python = ">=3.12,<3.14"
+dependencies = ["modal==1.6.3"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"

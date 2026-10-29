@@ -1,0 +1,4 @@
+[submodule "marin"]
+	path = marin
+	url = https://github.com/bkolligs/marin.git
+	branch = bkolligs/reusable-multimodal-experiments
