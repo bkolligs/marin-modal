@@ -29,6 +29,7 @@ image = (
     .uv_pip_install("uv==0.10.11")
     .run_commands(
         f"git clone --filter=blob:none --no-checkout {REPOSITORY_URL} {REMOTE_ROOT}",
+        f"git -C {REMOTE_ROOT} fetch --depth 1 origin {repository_revision()}",
         f"git -C {REMOTE_ROOT} checkout --detach {repository_revision()}",
         f"git -C {REMOTE_ROOT} submodule update --init --depth 1 marin",
         f"cd {REMOTE_MARIN} && UV_PROJECT_ENVIRONMENT=/opt/marin-venv "
@@ -57,14 +58,27 @@ image = (
     retries=0,
     max_containers=1,
     volumes={"/results": results_volume},
+    secrets=[modal.Secret.from_name("wandb", required_keys=["WANDB_API_KEY"])],
 )
-def projector_smoke(steps: int = 20) -> dict:
+def projector_smoke(steps: int = 20, wandb_project: str = "marin-vlm", wandb_entity: str = "") -> dict:
     subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total,driver_version", "--format=csv"], check=True)
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     output = Path("/results") / run_id
     try:
         subprocess.run(
-            [PYTHON, "-u", f"{REMOTE_ROOT}/projector_workload.py", "--steps", str(steps), "--output", str(output)],
+            [
+                PYTHON,
+                "-u",
+                f"{REMOTE_ROOT}/projector_workload.py",
+                "--steps",
+                str(steps),
+                "--output",
+                str(output),
+                "--wandb-project",
+                wandb_project,
+                "--wandb-entity",
+                wandb_entity,
+            ],
             cwd=REMOTE_MARIN,
             check=True,
         )
@@ -97,8 +111,8 @@ def environment_info() -> dict:
 
 
 @app.local_entrypoint()
-def main(steps: int = 20) -> None:
-    result = projector_smoke.remote(steps)
+def main(steps: int = 20, wandb_project: str = "marin-vlm", wandb_entity: str = "") -> None:
+    result = projector_smoke.remote(steps, wandb_project, wandb_entity)
     output = ROOT / "run-results"
     output.mkdir(exist_ok=True)
     (output / "latest.json").write_text(json.dumps(result, indent=2) + "\n")

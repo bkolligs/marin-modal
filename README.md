@@ -28,6 +28,17 @@ Inspect the initialized Modal checkout without requesting a GPU:
 uv run modal run modal_app.py::environment_info
 ```
 
+## Weights & Biases
+
+Create a Modal Secret named `wandb` containing `WANDB_API_KEY` using Modal's
+Secrets settings. The key is injected only into the training function at runtime;
+it is never included in the image or source code. Account selection is a CLI
+argument, and an omitted entity uses the authenticated account's default.
+
+Training metrics, checkpoint references, hyperparameters, and the final frozen-weight
+checks are logged to W&B alongside the JSON logs. Each launch gets a unique run ID.
+Code uploads are disabled. The W&B run URL is included in the ignored local result.
+
 ## H200 projector smoke test
 
 Commit and push launcher changes before running: the image clones the launcher's
@@ -35,7 +46,7 @@ committed revision from GitHub. Local uncommitted edits are not copied into the
 remote checkout.
 
 ```bash
-uv run modal run modal_app.py --steps 20
+uv run modal run modal_app.py --steps 20 --wandb-project marin-vlm --wandb-entity <your-entity>
 ```
 
 The function requests one H200, eight CPU cores, and 64 GiB of host memory, with a

@@ -12,6 +12,7 @@ import jax
 import jmp
 import numpy as np
 import optax
+import wandb
 from experiments.multimodality.base.launch import TEXT_CHECKPOINT, VISION_CHECKPOINT, model_config
 from experiments.multimodality.base.model import Vlm, VlmConfig, load_pretrained
 from experiments.multimodality.base.train import caption_batch, compute_loss
@@ -23,6 +24,7 @@ from levanter.layers.attention import AttentionBackend
 from levanter.models.qwen import Qwen3Config
 from levanter.models.siglip import SiglipVisionConfig
 from levanter.tracker.json_file import JsonFileTrackerConfig
+from levanter.tracker.wandb import WandbConfig
 from levanter.trainer import Trainer, TrainerConfig
 from levanter.trainer_state import trainables_only
 from levanter.utils.tree_utils import inference_mode
@@ -65,7 +67,7 @@ def cached_checkpoint(reference: str, cache: Path) -> str:
     )
 
 
-def run(output_root, steps=20, tiny=False):
+def run(output_root, steps=20, tiny=False, wandb_project="", wandb_entity=""):
     started = time.monotonic()
     output = Path(output_root)
     output.mkdir(parents=True, exist_ok=True)
@@ -126,14 +128,27 @@ def run(output_root, steps=20, tiny=False):
         config = model_config(vision_path, text_path)
         tokenizer = AutoTokenizer.from_pretrained(text_path)
         processor = SiglipImageProcessor.from_pretrained(vision_path)
+    trackers = (JsonFileTrackerConfig(output_path=str(output)),)
+    if wandb_project:
+        trackers += (
+            WandbConfig(
+                project=wandb_project,
+                entity=wandb_entity or None,
+                name=f"projector-{output.name}",
+                mode="online",
+                resume="never",
+                save_code=False,
+                background=False,
+            ),
+        )
     trainer_config = TrainerConfig(
-        id="projector-smoke",
+        id=f"projector-{output.name}",
         num_train_steps=steps,
         train_batch_size=2,
         per_device_parallelism=2,
         seed=0,
         mp=jmp.get_policy("p=f32,c=bf16,o=f32"),
-        tracker=JsonFileTrackerConfig(output_path=str(output)),
+        tracker=trackers,
         log_dir=output / "logs",
         log_jaxprs=False,
         log_xla_hlo=False,
@@ -162,6 +177,20 @@ def run(output_root, steps=20, tiny=False):
         trainable_count = parameter_count(trainables_only(state.model, mask))
         assert trainable_count == parameter_count(state.model.projector)
         assert trainable_count < 10_000_000
+        trainer.tracker.log_hyperparameters(
+            {
+                "vision_checkpoint": VISION_CHECKPOINT,
+                "text_checkpoint": TEXT_CHECKPOINT,
+                "trainable_parameters": trainable_count,
+                "training_stage": "projector",
+                "learning_rate": 1e-3,
+                "batch_size": 2,
+                "text_length": 16 if tiny else 32,
+                "steps": steps,
+                "data": "two generated colored-square image/caption pairs, repeated",
+                "tiny": tiny,
+            }
+        )
         print("TRAINABLE_PROJECTOR_PARAMETERS", trainable_count, flush=True)
         before = {name: checksum(getattr(state.model, name)) for name in ("vision", "language", "projector")}
         records = []
@@ -190,7 +219,6 @@ def run(output_root, steps=20, tiny=False):
         assert before["projector"] != after["projector"], "Projector did not update"
         assert losses[-1] < losses[0], losses
         eqx.tree_serialise_leaves(output / "projector.eqx", info.state.model.projector)
-    trainer.tracker.finish()
     summary = {
         "status": "passed",
         "device": devices[0].device_kind,
@@ -209,6 +237,11 @@ def run(output_root, steps=20, tiny=False):
         "vision_checkpoint": VISION_CHECKPOINT,
         "text_checkpoint": TEXT_CHECKPOINT,
     }
+    if wandb_project:
+        assert wandb.run is not None
+        summary["wandb_run_url"] = wandb.run.url
+    trainer.tracker.log_summary(summary)
+    trainer.tracker.finish()
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print("PROJECTOR_SMOKE_RESULT", json.dumps(summary), flush=True)
     return summary
@@ -219,5 +252,7 @@ if __name__ == "__main__":
     parser.add_argument("--tiny", action="store_true")
     parser.add_argument("--steps", type=int, default=20)
     parser.add_argument("--output", default="/tmp/marin-projector-local-smoke")
+    parser.add_argument("--wandb-project", default="")
+    parser.add_argument("--wandb-entity", default="")
     args = parser.parse_args()
-    run(args.output, args.steps, args.tiny)
+    run(args.output, args.steps, args.tiny, args.wandb_project, args.wandb_entity)
