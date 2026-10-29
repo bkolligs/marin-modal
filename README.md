@@ -37,7 +37,8 @@ argument, and an omitted entity uses the authenticated account's default. The
 project and run-name prefix are required launch arguments; neither is stored in code.
 
 Training metrics, checkpoint references, hyperparameters, and the final frozen-weight
-checks are logged to W&B alongside the JSON logs. Each launch gets a unique run ID.
+checks are logged to W&B alongside the JSON logs. Aggregate gradient and parameter
+norms are retained; per-parameter norm metrics are disabled. Each launch gets a unique run ID.
 Code uploads are disabled. The W&B run URL is included in the ignored local result.
 
 ## H200 projector smoke test

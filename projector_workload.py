@@ -17,6 +17,7 @@ from experiments.multimodality.base.launch import TEXT_CHECKPOINT, VISION_CHECKP
 from experiments.multimodality.base.model import Vlm, VlmConfig, load_pretrained
 from experiments.multimodality.base.train import caption_batch, compute_loss
 from huggingface_hub import snapshot_download
+from levanter.callbacks.watch import WatchConfig
 from levanter.checkpoint import CheckpointerConfig
 from levanter.compat.hf_checkpoints import RepoRef
 from levanter.distributed import DistributedConfig
@@ -151,6 +152,7 @@ def run(output_root, steps=20, tiny=False, wandb_project="", wandb_entity="", ru
         seed=0,
         mp=jmp.get_policy("p=f32,c=bf16,o=f32"),
         tracker=trackers,
+        watch=WatchConfig(include_per_parameter_norms=False),
         log_dir=output / "logs",
         log_jaxprs=False,
         log_xla_hlo=False,
