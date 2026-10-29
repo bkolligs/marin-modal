@@ -13,7 +13,6 @@ import jmp
 import numpy as np
 import optax
 import wandb
-from experiments.multimodality.base.launch import TEXT_CHECKPOINT, VISION_CHECKPOINT, model_config
 from experiments.multimodality.base.model import Vlm, VlmConfig, load_pretrained
 from experiments.multimodality.base.train import caption_batch, compute_loss
 from huggingface_hub import snapshot_download
@@ -124,11 +123,13 @@ def run(output_root, steps=20, tiny=False, wandb_project="", wandb_entity="", ru
         backend.pre_tokenizer = Whitespace()
         tokenizer = PreTrainedTokenizerFast(tokenizer_object=backend, bos_token="[BOS]", eos_token="[EOS]")
         processor = SiglipImageProcessor(size={"height": 4, "width": 4})
+        source_config = config
     else:
+        source_config = VlmConfig.from_checkpoints()
         cache = output.parent / "hf-cache"
-        vision_path = cached_checkpoint(VISION_CHECKPOINT, cache)
-        text_path = cached_checkpoint(TEXT_CHECKPOINT, cache)
-        config = model_config(vision_path, text_path)
+        vision_path = cached_checkpoint(source_config.vision_checkpoint, cache)
+        text_path = cached_checkpoint(source_config.text_checkpoint, cache)
+        config = dataclasses.replace(source_config, vision_checkpoint=vision_path, text_checkpoint=text_path)
         tokenizer = AutoTokenizer.from_pretrained(text_path)
         processor = SiglipImageProcessor.from_pretrained(vision_path)
     trackers = (JsonFileTrackerConfig(output_path=str(output)),)
@@ -169,8 +170,6 @@ def run(output_root, steps=20, tiny=False, wandb_project="", wandb_entity="", ru
         else:
             model = load_pretrained(
                 config,
-                vision_path,
-                text_path,
                 key=jax.random.PRNGKey(0),
                 axis_mapping=trainer.parameter_axis_mapping,
             )
@@ -183,8 +182,8 @@ def run(output_root, steps=20, tiny=False, wandb_project="", wandb_entity="", ru
         assert trainable_count < 10_000_000
         trainer.tracker.log_hyperparameters(
             {
-                "vision_checkpoint": VISION_CHECKPOINT,
-                "text_checkpoint": TEXT_CHECKPOINT,
+                "vision_checkpoint": source_config.vision_checkpoint,
+                "text_checkpoint": source_config.text_checkpoint,
                 "trainable_parameters": trainable_count,
                 "training_stage": "projector",
                 "learning_rate": 1e-3,
@@ -238,8 +237,8 @@ def run(output_root, steps=20, tiny=False, wandb_project="", wandb_entity="", ru
         "checksums_before": before,
         "checksums_after": after,
         "elapsed_seconds": time.monotonic() - started,
-        "vision_checkpoint": VISION_CHECKPOINT,
-        "text_checkpoint": TEXT_CHECKPOINT,
+        "vision_checkpoint": source_config.vision_checkpoint,
+        "text_checkpoint": source_config.text_checkpoint,
     }
     if wandb_project:
         assert wandb.run is not None
